@@ -13,6 +13,17 @@ import {
 import { Camera } from '@mediapipe/camera_utils';
 import ReactPlayer from 'react-player';
 
+const mediapipeTool = {
+  Holistic: Holistic || window.Holistic,
+  HAND_CONNECTIONS: HAND_CONNECTIONS || window.HAND_CONNECTIONS,
+  FACEMESH_TESSELATION: FACEMESH_TESSELATION || window.FACEMESH_TESSELATION,
+  FACEMESH_CONTOURS: FACEMESH_CONTOURS || window.FACEMESH_CONTOURS,
+  POSE_CONNECTIONS: POSE_CONNECTIONS || window.POSE_CONNECTIONS,
+  drawConnectors: drawConnectors || window.drawConnectors,
+  drawLandmarks: drawLandmarks || window.drawLandmarks,
+  Camera: Camera || window.Camera
+};
+
 export default function Main() {
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -43,7 +54,7 @@ export default function Main() {
   useEffect(() => {
     const initializeHolistic = async () => {
       try {
-        holisticRef.current = new Holistic({
+        holisticRef.current = new mediapipeTool.Holistic({
           locateFile: (file) => {
             return `/holistic/${file}`;
           }
@@ -95,12 +106,12 @@ export default function Main() {
     }
 
     if (results.poseLandmarks) {
-      drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {
+      mediapipeTool.drawConnectors(canvasCtx, results.poseLandmarks, mediapipeTool.POSE_CONNECTIONS, {
         color: '#00FF00',
         lineWidth: 3
       });
 
-      drawLandmarks(canvasCtx, results.poseLandmarks, {
+      mediapipeTool.drawLandmarks(canvasCtx, results.poseLandmarks, {
         color: '#FF0000',
         lineWidth: 1,
         radius: 4
@@ -108,17 +119,17 @@ export default function Main() {
     }
 
     if (results.faceLandmarks) {
-      drawConnectors(canvasCtx, results.faceLandmarks, FACEMESH_TESSELATION, {
+      mediapipeTool.drawConnectors(canvasCtx, results.faceLandmarks, mediapipeTool.FACEMESH_TESSELATION, {
         color: '#C0C0C070',
         lineWidth: 0.5
       });
 
-      drawConnectors(canvasCtx, results.faceLandmarks, FACEMESH_CONTOURS, {
+      mediapipeTool.drawConnectors(canvasCtx, results.faceLandmarks, mediapipeTool.FACEMESH_CONTOURS, {
         color: '#00FFFF',
         lineWidth: 1.5
       });
 
-      drawLandmarks(canvasCtx, results.faceLandmarks, {
+      mediapipeTool.drawLandmarks(canvasCtx, results.faceLandmarks, {
         color: '#FFFF00',
         lineWidth: 0.5,
         radius: 1.5
@@ -137,12 +148,12 @@ export default function Main() {
     };
 
     if (results.leftHandLandmarks) {
-      drawConnectors(canvasCtx, results.leftHandLandmarks, HAND_CONNECTIONS, {
+      mediapipeTool.drawConnectors(canvasCtx, results.leftHandLandmarks, mediapipeTool.HAND_CONNECTIONS, {
         color: handDrawingParams.left.connectionColor,
         lineWidth: 2
       });
 
-      drawLandmarks(canvasCtx, results.leftHandLandmarks, {
+      mediapipeTool.drawLandmarks(canvasCtx, results.leftHandLandmarks, {
         color: handDrawingParams.left.landmarkColor,
         lineWidth: 0.8,
         radius: 2.5
@@ -150,12 +161,12 @@ export default function Main() {
     }
 
     if (results.rightHandLandmarks) {
-      drawConnectors(canvasCtx, results.rightHandLandmarks, HAND_CONNECTIONS, {
+      mediapipeTool.drawConnectors(canvasCtx, results.rightHandLandmarks, mediapipeTool.HAND_CONNECTIONS, {
         color: handDrawingParams.right.connectionColor,
         lineWidth: 2
       });
 
-      drawLandmarks(canvasCtx, results.rightHandLandmarks, {
+      mediapipeTool.drawLandmarks(canvasCtx, results.rightHandLandmarks, {
         color: handDrawingParams.right.landmarkColor,
         lineWidth: 0.8,
         radius: 2.5
@@ -173,7 +184,7 @@ export default function Main() {
 
     try {
       requestAnimationFrame(() => {
-        const camera = new Camera(videoRef.current, {
+        const camera = new mediapipeTool.Camera(videoRef.current, {
           onFrame: async () => {
             if (!isProcessingRef.current) return;
             await holisticRef.current.send({ image: videoRef.current });

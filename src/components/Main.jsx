@@ -12,6 +12,7 @@ import {
 } from '@mediapipe/drawing_utils';
 import { Camera } from '@mediapipe/camera_utils';
 import ReactPlayer from 'react-player';
+import { flushSync } from 'react-dom';
 
 const mediapipeTool = {
   Holistic: Holistic || window.Holistic,
@@ -216,21 +217,16 @@ export default function Main() {
   const startProcessingVideo = () => {
     if (!holisticRef.current || !videoRef.current && !videoUrl) return;
 
-    setIsProcessing(true);
-    const processVideoFrame = () => {
-      if (!isProcessing || !videoRef.current || videoRef.current.paused || videoRef.current.ended) {
+    flushSync(() => setIsProcessing(true));
+    const processVideoFrame = async () => {
+      if (!isProcessingRef.current || !videoRef.current) {
         return;
       }
-
-      holisticRef.current.send({ image: videoRef.current });
+      await holisticRef.current.send({ image: videoRef.current.getInternalPlayer() });
       requestAnimationFrame(processVideoFrame);
     };
 
-    if (videoRef.current.readyState > 0) {
-      processVideoFrame();
-    } else {
-      videoRef.current.onloadedmetadata = processVideoFrame;
-    }
+    processVideoFrame();
   };
 
   const stopProcessingVideo = () => {
@@ -285,7 +281,7 @@ export default function Main() {
                 autoPlay
                 muted
                 playsInline
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover inverted"
               ></video>
             ) : videoUrl ? (
               <ReactPlayer
@@ -294,8 +290,8 @@ export default function Main() {
                 width="100%"
                 height="100%"
                 playing={isProcessing}
-                onReady={() => console.log('Video ready')}
-                onError={(err) => console.error('Video error:', err)}
+                loop
+                muted
               />
             ) : (
               <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-800/50 text-white">
@@ -305,7 +301,7 @@ export default function Main() {
               </div>
             )}
 
-            <canvas ref={canvasRef} className="canvas-overlay"></canvas>
+            <canvas ref={canvasRef} className={`canvas-overlay ${isCameraActive ? 'inverted' : ''}`}></canvas>
 
             {isProcessing && (
               <div className="status-indicator">

@@ -1,74 +1,46 @@
-import React from 'react';
-import { flushSync } from 'react-dom';
-import { usePoseStore } from '../../store/usePoseStore';
+import React from "react"
+import { flushSync } from "react-dom"
+import { usePoseStore } from "../../store/usePoseStore"
 
 export const ProcessControl = () => {
-  const {
-    isLoading,
-    isProcessing,
-    isCameraActive,
-    videoUrl,
-    setIsProcessing,
-  } = usePoseStore();
+  const { isLoading, isProcessing, isCameraActive, videoUrl, setIsProcessing } = usePoseStore()
 
   const startProcessingVideo = () => {
-    const state = usePoseStore.getState();
-    if (!state.holisticRef?.current || (!state.videoRef?.current && !videoUrl)) return;
+    const state = usePoseStore.getState()
+    if (!state.holisticRef?.current || (!state.videoRef?.current && !videoUrl)) return
 
-    flushSync(() => setIsProcessing(true));
-    
+    flushSync(() => setIsProcessing(true))
+
     const processVideoFrame = async () => {
-      const currentState = usePoseStore.getState();
+      const currentState = usePoseStore.getState()
       if (!currentState.isProcessing || !currentState.videoRef?.current) {
-        return;
+        return
       }
-      
-      const player = currentState.videoRef.current.getInternalPlayer?.();
+
+      const player = currentState.videoRef.current.getInternalPlayer?.()
       if (player && currentState.holisticRef?.current) {
-        // 检查视频是否准备好
-        const isVideoReady = player.readyState === undefined || player.readyState >= 2;
-        const hasValidDimensions = (player.videoWidth > 0 || player.width > 0) && 
-                                   (player.videoHeight > 0 || player.height > 0);
-        
+        const isVideoReady = player.readyState === undefined || player.readyState >= 2
+        const hasValidDimensions = (player.videoWidth > 0 || player.width > 0) && (player.videoHeight > 0 || player.height > 0)
+
         if (isVideoReady && hasValidDimensions) {
-          // 使用新的 detectForVideo 方法
-          const { detectForVideo } = currentState.holisticRef.current;
+          const { detectForVideo } = currentState.holisticRef.current
           if (detectForVideo) {
-            await detectForVideo(player);
+            await detectForVideo(player)
           }
         }
       }
-      requestAnimationFrame(processVideoFrame);
-    };
+      requestAnimationFrame(processVideoFrame)
+    }
 
-    processVideoFrame();
-  };
+    processVideoFrame()
+  }
 
   const stopProcessingVideo = () => {
-    setIsProcessing(false);
-    
-    // 清空姿态数据和骨骼绘制
-    const state = usePoseStore.getState();
-    
-    // 清空 poseData
-    state.setPoseData(null);
-    
-    // 清空 lastResultsRef
-    if (state.lastResultsRef?.current) {
-      state.lastResultsRef.current = null;
-    }
-    
-    // 清空 canvas
-    const canvasElement = state.canvasRef?.current;
-    if (canvasElement) {
-      const canvasCtx = canvasElement.getContext('2d');
-      if (canvasCtx) {
-        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-      }
-    }
-  };
+    // setIsProcessing(false) 会自动清除 canvas 和 poseData
+    setIsProcessing(false)
+  }
 
-  const isDisabled = isLoading || (!isCameraActive && !videoUrl);
+  const isDisabled = isLoading || (!isCameraActive && !videoUrl)
 
   return (
     <div className="bg-white p-4 rounded-xl shadow-sm">
@@ -79,23 +51,16 @@ export const ProcessControl = () => {
         <h3 className="text-sm font-semibold">Processing</h3>
       </div>
       {!isProcessing ? (
-        <button
-          className="control-button control-button-primary w-full justify-center text-sm py-2"
-          onClick={startProcessingVideo}
-          disabled={isDisabled}
-        >
+        <button className="control-button control-button-primary w-full justify-center text-sm py-2" onClick={startProcessingVideo} disabled={isDisabled}>
           <i className="fa fa-play"></i>
           <span>Start</span>
         </button>
       ) : (
-        <button
-          className="control-button control-button-secondary w-full justify-center text-sm py-2"
-          onClick={stopProcessingVideo}
-        >
+        <button className="control-button control-button-secondary w-full justify-center text-sm py-2" onClick={stopProcessingVideo}>
           <i className="fa fa-pause"></i>
           <span>Stop</span>
         </button>
       )}
     </div>
-  );
-};
+  )
+}

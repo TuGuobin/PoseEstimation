@@ -14,8 +14,10 @@ const MODEL_PATH_FACE = '/model/face_landmarker.task';
 
 export const useHolistic = () => {
   const {
+    isProcessing,
     canvasRef,
     lastResultsRef,
+    setPoseData,
   } = usePoseStore();
 
   const poseLandmarkerRef = useRef(null);
@@ -243,10 +245,8 @@ export const useHolistic = () => {
         imageSource.videoHeight || imageSource.height || 480
       );
     } catch (error) {
-      // 忽略 WASM 中止错误，这通常是由于 GPU 上下文被销毁引起的
       if (error.message && error.message.includes('Aborted')) {
         console.warn('MediaPipe WASM aborted, possibly due to GPU context loss. Stopping detection.');
-        // 停止处理以避免持续报错
         const { setIsProcessing } = usePoseStore.getState();
         setIsProcessing(false);
       } else {
@@ -256,7 +256,24 @@ export const useHolistic = () => {
   }, [processResults]);
 
   useEffect(() => {
-    // 防止重复初始化
+    if (!isProcessing) {
+      setPoseData(null);
+
+      if (lastResultsRef?.current) {
+        lastResultsRef.current = null;
+      }
+
+      const canvasElement = canvasRef?.current;
+      if (canvasElement) {
+        const canvasCtx = canvasElement.getContext('2d');
+        if (canvasCtx) {
+          canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+        }
+      }
+    }
+  }, [isProcessing, canvasRef, lastResultsRef, setPoseData]);
+
+  useEffect(() => {
     if (isInitializedRef.current) return;
     isInitializedRef.current = true;
 

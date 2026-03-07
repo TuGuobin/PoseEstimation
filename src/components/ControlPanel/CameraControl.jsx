@@ -74,7 +74,9 @@ export const CameraControl = () => {
       state.cameraRef.current.stop();
       state.cameraRef.current = null;
     }
+
     setIsCameraActive(false);
+    // setIsProcessing(false) 会自动清除 canvas 和 poseData
     setIsProcessing(false);
   };
 

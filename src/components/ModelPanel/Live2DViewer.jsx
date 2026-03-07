@@ -3,47 +3,33 @@ import * as PIXI from 'pixi.js';
 import { Live2DModel } from 'pixi-live2d-display';
 import { Face, Pose, Hand } from 'kalidokit';
 
-// 注册Live2D模型到PIXI
 Live2DModel.registerTicker(PIXI.Ticker);
 
-// 插值函数
 const lerp = (start, end, t) => start + (end - start) * t;
 
-// 弧度转角度
 const toDegrees = (rad) => rad * (180 / Math.PI);
 
-// 常用Live2D参数名映射（可根据实际模型调整）
 const PARAM_NAMES = {
-  // 身体
   bodyX: 'ParamBodyAngleX',
   bodyY: 'ParamBodyAngleY',
   bodyZ: 'ParamBodyAngleZ',
-
-  // 左臂
-  leftArmV: 'ParamArmLAngleV',   // 垂直角度（上下）
-  leftArmH: 'ParamArmLAngleH',   // 水平角度（左右）
-  leftArmT: 'ParamArmLAngleT',   // 扭转角度（可选）
-
-  // 右臂
+  leftArmV: 'ParamArmLAngleV',
+  leftArmH: 'ParamArmLAngleH',
+  leftArmT: 'ParamArmLAngleT',
   rightArmV: 'ParamArmRAngleV',
   rightArmH: 'ParamArmRAngleH',
   rightArmT: 'ParamArmRAngleT',
-
-  // 手腕（手型，0~1）
   leftHand: 'ParamHandL',
   rightHand: 'ParamHandR',
-
-  // 手指（每个手指的弯曲参数，若无则忽略）
-  leftThumb:   'ParamFingerLThumb',
-  leftIndex:   'ParamFingerLIndex',
-  leftMiddle:  'ParamFingerLMiddle',
-  leftRing:    'ParamFingerLRing',
-  leftLittle:  'ParamFingerLLittle',
-
-  rightThumb:  'ParamFingerRThumb',
-  rightIndex:  'ParamFingerRIndex',
+  leftThumb: 'ParamFingerLThumb',
+  leftIndex: 'ParamFingerLIndex',
+  leftMiddle: 'ParamFingerLMiddle',
+  leftRing: 'ParamFingerLRing',
+  leftLittle: 'ParamFingerLLittle',
+  rightThumb: 'ParamFingerRThumb',
+  rightIndex: 'ParamFingerRIndex',
   rightMiddle: 'ParamFingerRMiddle',
-  rightRing:   'ParamFingerRRing',
+  rightRing: 'ParamFingerRRing',
   rightLittle: 'ParamFingerRLittle',
 };
 
@@ -54,15 +40,13 @@ export const Live2DViewer = ({ poseData, videoElement }) => {
   const modelRef = useRef(null);
   const originalUpdateRef = useRef(null);
 
-  // 存储解算结果
   const riggedFaceRef = useRef(null);
   const riggedPoseRef = useRef(null);
-  const riggedLeftHandRef = useRef(null);  // 对应真实左手（画面右手）
-  const riggedRightHandRef = useRef(null); // 对应真实右手（画面左手）
+  const riggedLeftHandRef = useRef(null);
+  const riggedRightHandRef = useRef(null);
 
   const [isModelLoaded, setIsModelLoaded] = useState(false);
 
-  // 初始化PIXI应用和Live2D模型（保持不变）
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -74,7 +58,6 @@ export const Live2DViewer = ({ poseData, videoElement }) => {
     let canvas = null;
 
     const init = async () => {
-      // 等待父元素渲染完成
       let parent = containerRef.current;
       let attempts = 0;
       while ((!parent || parent.clientWidth === 0) && attempts < 50 && isMounted) {
@@ -122,14 +105,12 @@ export const Live2DViewer = ({ poseData, videoElement }) => {
         }
 
         modelRef.current = model;
-        // 保存原始update函数
         originalUpdateRef.current = model.internalModel.motionManager.update.bind(model.internalModel.motionManager);
 
         model.scale.set(0.25);
         model.anchor.set(0.5, 0.5);
         model.position.set(width / 2, height * 0.8);
 
-        // 交互（拖拽、缩放）
         model.interactive = true;
         model.on('pointerdown', (e) => {
           model.offsetX = e.data.global.x - model.position.x;
@@ -189,11 +170,18 @@ export const Live2DViewer = ({ poseData, videoElement }) => {
     };
   }, []);
 
-  // 处理姿态数据：解算面部、躯干、双手
   useEffect(() => {
-    if (!isModelLoaded || !modelRef.current || !poseData || !videoElement) return;
+    if (!isModelLoaded || !modelRef.current) return;
 
-    // 面部解算
+    if (!poseData || !videoElement) {
+      // 当 poseData 为 null 时，重置到初始状态
+      riggedFaceRef.current = null;
+      riggedPoseRef.current = null;
+      riggedLeftHandRef.current = null;
+      riggedRightHandRef.current = null;
+      return;
+    }
+
     if (poseData.faceLandmarks) {
       riggedFaceRef.current = Face.solve(poseData.faceLandmarks, {
         runtime: 'mediapipe',
@@ -205,7 +193,6 @@ export const Live2DViewer = ({ poseData, videoElement }) => {
       riggedFaceRef.current = null;
     }
 
-    // 躯干解算（兼容新版MediaPipe字段）
     const worldLandmarks =
       poseData.poseWorldLandmarks ??
       poseData.za ??
@@ -221,7 +208,6 @@ export const Live2DViewer = ({ poseData, videoElement }) => {
       riggedPoseRef.current = null;
     }
 
-    // 手部解算（注意镜像：左手landmarks对应真实右手）
     if (poseData.leftHandLandmarks) {
       riggedRightHandRef.current = Hand.solve(poseData.leftHandLandmarks, 'Right');
     } else {
@@ -235,7 +221,6 @@ export const Live2DViewer = ({ poseData, videoElement }) => {
     }
   }, [isModelLoaded, poseData, videoElement]);
 
-  // 重写update函数，应用所有追踪数据
   useEffect(() => {
     if (!isModelLoaded || !modelRef.current) return;
 
@@ -243,12 +228,7 @@ export const Live2DViewer = ({ poseData, videoElement }) => {
     const coreModel = model.internalModel.coreModel;
     const originalUpdate = originalUpdateRef.current;
 
-    // 新的update函数
     model.internalModel.motionManager.update = (...args) => {
-      // 先调用原始update，保留模型内置动画（呼吸等）
-      // if (originalUpdate) originalUpdate(...args);
-
-      // 禁用默认眨眼，由面部追踪控制
       model.internalModel.eyeBlink = undefined;
 
       const riggedFace = riggedFaceRef.current;
@@ -256,50 +236,109 @@ export const Live2DViewer = ({ poseData, videoElement }) => {
       const riggedLeftHand = riggedLeftHandRef.current;
       const riggedRightHand = riggedRightHandRef.current;
 
-      // --- 面部参数（沿用原有逻辑，但加入平滑）---
+      // 如果没有姿态数据，平滑过渡回初始状态
+      const resetSmooth = 0.1;
+
+      if (!riggedFace) {
+        // 重置面部参数到默认值
+        coreModel.setParameterValueById('ParamEyeBallX', lerp(0, coreModel.getParameterValueById('ParamEyeBallX'), resetSmooth));
+        coreModel.setParameterValueById('ParamEyeBallY', lerp(0, coreModel.getParameterValueById('ParamEyeBallY'), resetSmooth));
+        coreModel.setParameterValueById('ParamAngleX', lerp(0, coreModel.getParameterValueById('ParamAngleX'), resetSmooth));
+        coreModel.setParameterValueById('ParamAngleY', lerp(0, coreModel.getParameterValueById('ParamAngleY'), resetSmooth));
+        coreModel.setParameterValueById('ParamAngleZ', lerp(0, coreModel.getParameterValueById('ParamAngleZ'), resetSmooth));
+        coreModel.setParameterValueById(PARAM_NAMES.bodyX, lerp(0, coreModel.getParameterValueById(PARAM_NAMES.bodyX), resetSmooth));
+        coreModel.setParameterValueById(PARAM_NAMES.bodyY, lerp(0, coreModel.getParameterValueById(PARAM_NAMES.bodyY), resetSmooth));
+        coreModel.setParameterValueById(PARAM_NAMES.bodyZ, lerp(0, coreModel.getParameterValueById(PARAM_NAMES.bodyZ), resetSmooth));
+        coreModel.setParameterValueById('ParamEyeLOpen', lerp(1, coreModel.getParameterValueById('ParamEyeLOpen'), resetSmooth));
+        coreModel.setParameterValueById('ParamEyeROpen', lerp(1, coreModel.getParameterValueById('ParamEyeROpen'), resetSmooth));
+        coreModel.setParameterValueById('ParamMouthOpenY', lerp(0, coreModel.getParameterValueById('ParamMouthOpenY'), resetSmooth));
+        coreModel.setParameterValueById('ParamMouthForm', lerp(0.3, coreModel.getParameterValueById('ParamMouthForm'), resetSmooth));
+        coreModel.setParameterValueById('ParamBrowLY', lerp(0, coreModel.getParameterValueById('ParamBrowLY'), resetSmooth));
+        coreModel.setParameterValueById('ParamBrowRY', lerp(0, coreModel.getParameterValueById('ParamBrowRY'), resetSmooth));
+        coreModel.setParameterValueById('ParamBrowLX', lerp(0, coreModel.getParameterValueById('ParamBrowLX'), resetSmooth));
+        coreModel.setParameterValueById('ParamBrowRX', lerp(0, coreModel.getParameterValueById('ParamBrowRX'), resetSmooth));
+        coreModel.setParameterValueById('ParamBrowLAngle', lerp(0, coreModel.getParameterValueById('ParamBrowLAngle'), resetSmooth));
+        coreModel.setParameterValueById('ParamBrowRAngle', lerp(0, coreModel.getParameterValueById('ParamBrowRAngle'), resetSmooth));
+        coreModel.setParameterValueById('ParamBrowLForm', lerp(0, coreModel.getParameterValueById('ParamBrowLForm'), resetSmooth));
+        coreModel.setParameterValueById('ParamBrowRForm', lerp(0, coreModel.getParameterValueById('ParamBrowRForm'), resetSmooth));
+      }
+
+      if (!riggedPose) {
+        // 重置身体姿态到默认值
+        coreModel.setParameterValueById(PARAM_NAMES.bodyX, lerp(0, coreModel.getParameterValueById(PARAM_NAMES.bodyX), resetSmooth));
+        coreModel.setParameterValueById(PARAM_NAMES.bodyY, lerp(0, coreModel.getParameterValueById(PARAM_NAMES.bodyY), resetSmooth));
+        coreModel.setParameterValueById(PARAM_NAMES.bodyZ, lerp(0, coreModel.getParameterValueById(PARAM_NAMES.bodyZ), resetSmooth));
+        coreModel.setParameterValueById(PARAM_NAMES.leftArmV, lerp(0, coreModel.getParameterValueById(PARAM_NAMES.leftArmV), resetSmooth));
+        coreModel.setParameterValueById(PARAM_NAMES.leftArmH, lerp(0, coreModel.getParameterValueById(PARAM_NAMES.leftArmH), resetSmooth));
+        coreModel.setParameterValueById(PARAM_NAMES.leftArmT, lerp(0, coreModel.getParameterValueById(PARAM_NAMES.leftArmT), resetSmooth));
+        coreModel.setParameterValueById(PARAM_NAMES.rightArmV, lerp(0, coreModel.getParameterValueById(PARAM_NAMES.rightArmV), resetSmooth));
+        coreModel.setParameterValueById(PARAM_NAMES.rightArmH, lerp(0, coreModel.getParameterValueById(PARAM_NAMES.rightArmH), resetSmooth));
+        coreModel.setParameterValueById(PARAM_NAMES.rightArmT, lerp(0, coreModel.getParameterValueById(PARAM_NAMES.rightArmT), resetSmooth));
+      }
+
+      if (!riggedLeftHand) {
+        // 重置左手到默认值
+        coreModel.setParameterValueById(PARAM_NAMES.leftHand, lerp(0, coreModel.getParameterValueById(PARAM_NAMES.leftHand), resetSmooth));
+        coreModel.setParameterValueById(PARAM_NAMES.leftThumb, lerp(0, coreModel.getParameterValueById(PARAM_NAMES.leftThumb), resetSmooth));
+        coreModel.setParameterValueById(PARAM_NAMES.leftIndex, lerp(0, coreModel.getParameterValueById(PARAM_NAMES.leftIndex), resetSmooth));
+        coreModel.setParameterValueById(PARAM_NAMES.leftMiddle, lerp(0, coreModel.getParameterValueById(PARAM_NAMES.leftMiddle), resetSmooth));
+        coreModel.setParameterValueById(PARAM_NAMES.leftRing, lerp(0, coreModel.getParameterValueById(PARAM_NAMES.leftRing), resetSmooth));
+        coreModel.setParameterValueById(PARAM_NAMES.leftLittle, lerp(0, coreModel.getParameterValueById(PARAM_NAMES.leftLittle), resetSmooth));
+      }
+
+      if (!riggedRightHand) {
+        // 重置右手到默认值
+        coreModel.setParameterValueById(PARAM_NAMES.rightHand, lerp(0, coreModel.getParameterValueById(PARAM_NAMES.rightHand), resetSmooth));
+        coreModel.setParameterValueById(PARAM_NAMES.rightThumb, lerp(0, coreModel.getParameterValueById(PARAM_NAMES.rightThumb), resetSmooth));
+        coreModel.setParameterValueById(PARAM_NAMES.rightIndex, lerp(0, coreModel.getParameterValueById(PARAM_NAMES.rightIndex), resetSmooth));
+        coreModel.setParameterValueById(PARAM_NAMES.rightMiddle, lerp(0, coreModel.getParameterValueById(PARAM_NAMES.rightMiddle), resetSmooth));
+        coreModel.setParameterValueById(PARAM_NAMES.rightRing, lerp(0, coreModel.getParameterValueById(PARAM_NAMES.rightRing), resetSmooth));
+        coreModel.setParameterValueById(PARAM_NAMES.rightLittle, lerp(0, coreModel.getParameterValueById(PARAM_NAMES.rightLittle), resetSmooth));
+      }
+
       if (riggedFace) {
         const smooth = 0.5;
+        const eyeScale = 2;
 
-        // 视线
         coreModel.setParameterValueById(
           'ParamEyeBallX',
-          lerp(riggedFace.pupil.x, coreModel.getParameterValueById('ParamEyeBallX'), smooth)
+          lerp(-riggedFace.pupil.x * eyeScale, coreModel.getParameterValueById('ParamEyeBallX'), smooth)
         );
         coreModel.setParameterValueById(
           'ParamEyeBallY',
-          lerp(-riggedFace.pupil.y, coreModel.getParameterValueById('ParamEyeBallY'), smooth)
+          lerp(-riggedFace.pupil.y * eyeScale, coreModel.getParameterValueById('ParamEyeBallY'), smooth)
         );
 
-        // 头部角度
+        const headScaleX = 2;
+        const headScaleY = 2;
+
         coreModel.setParameterValueById(
           'ParamAngleX',
-          lerp(riggedFace.head.degrees.y, coreModel.getParameterValueById('ParamAngleX'), smooth)
+          lerp(riggedFace.head.degrees.y * headScaleX, coreModel.getParameterValueById('ParamAngleX'), smooth)
         );
         coreModel.setParameterValueById(
           'ParamAngleY',
-          lerp(-riggedFace.head.degrees.x, coreModel.getParameterValueById('ParamAngleY'), smooth)
+          lerp(riggedFace.head.degrees.x * headScaleY, coreModel.getParameterValueById('ParamAngleY'), smooth)
         );
         coreModel.setParameterValueById(
           'ParamAngleZ',
-          lerp(-riggedFace.head.degrees.z, coreModel.getParameterValueById('ParamAngleZ'), smooth)
+          lerp(riggedFace.head.degrees.z, coreModel.getParameterValueById('ParamAngleZ'), smooth)
         );
 
-        // 身体跟随头部（轻微）
         const dampener = 0.3;
         coreModel.setParameterValueById(
           PARAM_NAMES.bodyX,
-          lerp(riggedFace.head.degrees.y * dampener, coreModel.getParameterValueById(PARAM_NAMES.bodyX), smooth)
+          lerp(riggedFace.head.degrees.y * dampener * headScaleX, coreModel.getParameterValueById(PARAM_NAMES.bodyX), smooth)
         );
         coreModel.setParameterValueById(
           PARAM_NAMES.bodyY,
-          lerp(-riggedFace.head.degrees.x * dampener, coreModel.getParameterValueById(PARAM_NAMES.bodyY), smooth)
+          lerp(riggedFace.head.degrees.x * dampener * headScaleY, coreModel.getParameterValueById(PARAM_NAMES.bodyY), smooth)
         );
         coreModel.setParameterValueById(
           PARAM_NAMES.bodyZ,
-          lerp(-riggedFace.head.degrees.z * dampener, coreModel.getParameterValueById(PARAM_NAMES.bodyZ), smooth)
+          lerp(riggedFace.head.degrees.z * dampener, coreModel.getParameterValueById(PARAM_NAMES.bodyZ), smooth)
         );
 
-        // 眼睛开合
         coreModel.setParameterValueById(
           'ParamEyeLOpen',
           lerp(riggedFace.eye.l, coreModel.getParameterValueById('ParamEyeLOpen'), 0.7)
@@ -309,7 +348,6 @@ export const Live2DViewer = ({ poseData, videoElement }) => {
           lerp(riggedFace.eye.r, coreModel.getParameterValueById('ParamEyeROpen'), 0.7)
         );
 
-        // 嘴巴
         coreModel.setParameterValueById(
           'ParamMouthOpenY',
           lerp(riggedFace.mouth.y, coreModel.getParameterValueById('ParamMouthOpenY'), 0.3)
@@ -318,16 +356,56 @@ export const Live2DViewer = ({ poseData, videoElement }) => {
           'ParamMouthForm',
           0.3 + lerp(riggedFace.mouth.x, coreModel.getParameterValueById('ParamMouthForm'), 0.3)
         );
+
+        const browSmooth = 0.5;
+        const browLY = (riggedFace.eyebrow?.left || 0) * 10;
+        const browRY = (riggedFace.eyebrow?.right || 0) * 10;
+        coreModel.setParameterValueById(
+          'ParamBrowLY',
+          lerp(browLY, coreModel.getParameterValueById('ParamBrowLY'), browSmooth)
+        );
+        coreModel.setParameterValueById(
+          'ParamBrowRY',
+          lerp(browRY, coreModel.getParameterValueById('ParamBrowRY'), browSmooth)
+        );
+
+        const browLX = -(riggedFace.head?.degrees?.y || 0) * 0.1;
+        const browRX = -(riggedFace.head?.degrees?.y || 0) * 0.1;
+        coreModel.setParameterValueById(
+          'ParamBrowLX',
+          lerp(browLX, coreModel.getParameterValueById('ParamBrowLX'), browSmooth)
+        );
+        coreModel.setParameterValueById(
+          'ParamBrowRX',
+          lerp(-browRX, coreModel.getParameterValueById('ParamBrowRX'), browSmooth)
+        );
+
+        const browAngle = -(riggedFace.head?.degrees?.z || 0) * 0.3;
+        coreModel.setParameterValueById(
+          'ParamBrowLAngle',
+          lerp(browAngle, coreModel.getParameterValueById('ParamBrowLAngle'), browSmooth)
+        );
+        coreModel.setParameterValueById(
+          'ParamBrowRAngle',
+          lerp(-browAngle, coreModel.getParameterValueById('ParamBrowRAngle'), browSmooth)
+        );
+
+        const browForm = riggedFace.mouth?.x || 0;
+        coreModel.setParameterValueById(
+          'ParamBrowLForm',
+          lerp(browForm, coreModel.getParameterValueById('ParamBrowLForm'), browSmooth)
+        );
+        coreModel.setParameterValueById(
+          'ParamBrowRForm',
+          lerp(browForm, coreModel.getParameterValueById('ParamBrowRForm'), browSmooth)
+        );
       }
 
-      // --- 躯干与四肢 ---
       if (riggedPose) {
-        const bodySmooth = 0.6; // 可调
+        const bodySmooth = 0.6;
 
-        // 身体旋转（从hips或spine获取，这里用hips近似）
         if (riggedPose.Hips?.rotation) {
           const r = riggedPose.Hips.rotation;
-          // 弧度转角度，并应用阻尼
           coreModel.setParameterValueById(
             PARAM_NAMES.bodyX,
             lerp(toDegrees(r.y) * 0.5, coreModel.getParameterValueById(PARAM_NAMES.bodyX), bodySmooth)
@@ -342,10 +420,8 @@ export const Live2DViewer = ({ poseData, videoElement }) => {
           );
         }
 
-        // 左臂（真实左手）
         if (riggedPose.LeftUpperArm?.rotation) {
           const arm = riggedPose.LeftUpperArm.rotation;
-          // 根据手臂姿态映射到V/H/T参数（需根据模型调整系数）
           coreModel.setParameterValueById(
             PARAM_NAMES.leftArmV,
             lerp(toDegrees(arm.z) * 0.8, coreModel.getParameterValueById(PARAM_NAMES.leftArmV), bodySmooth)
@@ -360,7 +436,6 @@ export const Live2DViewer = ({ poseData, videoElement }) => {
           );
         }
 
-        // 右臂（真实右手）
         if (riggedPose.RightUpperArm?.rotation) {
           const arm = riggedPose.RightUpperArm.rotation;
           coreModel.setParameterValueById(
@@ -378,13 +453,10 @@ export const Live2DViewer = ({ poseData, videoElement }) => {
         }
       }
 
-      // --- 左手（真实左手） ---
       if (riggedLeftHand) {
         const handSmooth = 0.8;
 
-        // 手腕旋转（若模型有手腕参数，可映射；这里简单映射到手型）
         if (riggedLeftHand.LeftWrist) {
-          // 示例：使用手腕y轴旋转影响手型开合（可能需要更复杂的映射）
           const wristY = Math.abs(riggedLeftHand.LeftWrist.y);
           coreModel.setParameterValueById(
             PARAM_NAMES.leftHand,
@@ -392,12 +464,10 @@ export const Live2DViewer = ({ poseData, videoElement }) => {
           );
         }
 
-        // 手指弯曲（每个指节的角度累加或取平均后映射到对应手指参数）
         const mapFinger = (fingerName, kalidoPrefix) => {
           const proximal = riggedLeftHand[`Left${kalidoPrefix}Proximal`]?.x || 0;
           const intermediate = riggedLeftHand[`Left${kalidoPrefix}Intermediate`]?.x || 0;
           const distal = riggedLeftHand[`Left${kalidoPrefix}Distal`]?.x || 0;
-          // 平均弯曲角度（弧度转角度，归一化到0~1之间，假设最大弯曲为PI/2）
           const avg = (proximal + intermediate + distal) / 3;
           const value = Math.min(1, toDegrees(avg) / 90);
           coreModel.setParameterValueById(
@@ -413,7 +483,6 @@ export const Live2DViewer = ({ poseData, videoElement }) => {
         mapFinger(PARAM_NAMES.leftLittle, 'Little');
       }
 
-      // --- 右手（真实右手） ---
       if (riggedRightHand) {
         const handSmooth = 0.8;
 
@@ -446,7 +515,6 @@ export const Live2DViewer = ({ poseData, videoElement }) => {
     };
 
     return () => {
-      // 组件卸载时恢复原始update，避免影响其他实例
       if (modelRef.current && originalUpdateRef.current) {
         modelRef.current.internalModel.motionManager.update = originalUpdateRef.current;
       }

@@ -22,9 +22,21 @@ export const ProcessControl = () => {
       if (!currentState.isProcessing || !currentState.videoRef?.current) {
         return;
       }
+      
       const player = currentState.videoRef.current.getInternalPlayer?.();
       if (player && currentState.holisticRef?.current) {
-        await currentState.holisticRef.current.send({ image: player });
+        // 检查视频是否准备好
+        const isVideoReady = player.readyState === undefined || player.readyState >= 2;
+        const hasValidDimensions = (player.videoWidth > 0 || player.width > 0) && 
+                                   (player.videoHeight > 0 || player.height > 0);
+        
+        if (isVideoReady && hasValidDimensions) {
+          // 使用新的 detectForVideo 方法
+          const { detectForVideo } = currentState.holisticRef.current;
+          if (detectForVideo) {
+            await detectForVideo(player);
+          }
+        }
       }
       requestAnimationFrame(processVideoFrame);
     };
@@ -34,6 +46,26 @@ export const ProcessControl = () => {
 
   const stopProcessingVideo = () => {
     setIsProcessing(false);
+    
+    // 清空姿态数据和骨骼绘制
+    const state = usePoseStore.getState();
+    
+    // 清空 poseData
+    state.setPoseData(null);
+    
+    // 清空 lastResultsRef
+    if (state.lastResultsRef?.current) {
+      state.lastResultsRef.current = null;
+    }
+    
+    // 清空 canvas
+    const canvasElement = state.canvasRef?.current;
+    if (canvasElement) {
+      const canvasCtx = canvasElement.getContext('2d');
+      if (canvasCtx) {
+        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+      }
+    }
   };
 
   const isDisabled = isLoading || (!isCameraActive && !videoUrl);

@@ -24,11 +24,28 @@ export const CameraControl = () => {
 
     try {
       requestAnimationFrame(() => {
-        const camera = new mediapipeTool.Camera(state.videoRef?.current, {
+        const videoElement = state.videoRef?.current;
+        if (!videoElement) return;
+
+        const camera = new mediapipeTool.Camera(videoElement, {
           onFrame: async () => {
-            const { isProcessing } = usePoseStore.getState();
-            if (!isProcessing) return;
-            await state.holisticRef.current.send({ image: state.videoRef.current });
+            const { isProcessing, holisticRef } = usePoseStore.getState();
+            if (!isProcessing || !holisticRef?.current) return;
+            
+            // 检查视频元素是否有效
+            if (!videoElement || 
+                videoElement.videoWidth === 0 || 
+                videoElement.videoHeight === 0 ||
+                videoElement.readyState < 2) {
+              return;
+            }
+            
+            // 使用新的 detectForVideo 方法
+            const { detectForVideo } = holisticRef.current;
+            if (detectForVideo) {
+              const timestamp = performance.now();
+              await detectForVideo(videoElement, timestamp);
+            }
           },
           width: 1280,
           height: 720

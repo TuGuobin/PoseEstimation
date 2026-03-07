@@ -1,11 +1,8 @@
 import { create } from 'zustand';
 
 const availableModels = [
-  { name: 'Model 1', file: '262410318834873893.vrm' },
-  { name: 'Model 2', file: '3636451243928341470.vrm' },
-  { name: 'Model 3', file: '3859814441197244330.vrm' },
-  { name: 'Model 4', file: '4903904892802642869.vrm' },
-  { name: 'Model 5', file: '8087383217573817818.vrm' },
+  { name: 'Male', file: 'male.vrm' },
+  { name: 'Female', file: 'female.vrm' },
 ];
 
 export const usePoseStore = create((set, get) => ({
@@ -31,7 +28,26 @@ export const usePoseStore = create((set, get) => ({
     set({ detectionConfidence: confidence });
     const { holisticRef } = get();
     if (holisticRef?.current) {
-      holisticRef.current.setOptions({ detectionConfidence: confidence });
+      // 更新所有 landmarker 的置信度设置
+      const { poseLandmarker, handLandmarker, faceLandmarker } = holisticRef.current;
+      if (poseLandmarker) {
+        poseLandmarker.setOptions({
+          minPoseDetectionConfidence: confidence,
+          minPosePresenceConfidence: confidence
+        });
+      }
+      if (handLandmarker) {
+        handLandmarker.setOptions({
+          minHandDetectionConfidence: confidence,
+          minHandPresenceConfidence: confidence
+        });
+      }
+      if (faceLandmarker) {
+        faceLandmarker.setOptions({
+          minFaceDetectionConfidence: confidence,
+          minFacePresenceConfidence: confidence
+        });
+      }
     }
   },
 
@@ -40,7 +56,17 @@ export const usePoseStore = create((set, get) => ({
     set({ trackingConfidence: confidence });
     const { holisticRef } = get();
     if (holisticRef?.current) {
-      holisticRef.current.setOptions({ trackingConfidence: confidence });
+      // 更新所有 landmarker 的跟踪置信度设置
+      const { poseLandmarker, handLandmarker, faceLandmarker } = holisticRef.current;
+      if (poseLandmarker) {
+        poseLandmarker.setOptions({ minTrackingConfidence: confidence });
+      }
+      if (handLandmarker) {
+        handLandmarker.setOptions({ minTrackingConfidence: confidence });
+      }
+      if (faceLandmarker) {
+        faceLandmarker.setOptions({ minTrackingConfidence: confidence });
+      }
     }
   },
 
@@ -50,6 +76,13 @@ export const usePoseStore = create((set, get) => ({
 
   showSkeleton: true,
   setShowSkeleton: (show) => set({ showSkeleton: show }),
+
+  // 骨骼绘制粗细设置
+  skeletonLineWidth: 2,
+  setSkeletonLineWidth: (width) => set({ skeletonLineWidth: width }),
+
+  skeletonPointRadius: 3,
+  setSkeletonPointRadius: (radius) => set({ skeletonPointRadius: radius }),
 
   // 模型选择
   selectedModel: 0,

@@ -1,53 +1,85 @@
 import { useEffect, useCallback, useRef } from 'react';
 import {
-  Holistic,
-  HAND_CONNECTIONS,
-  FACEMESH_TESSELATION,
-  FACEMESH_CONTOURS,
-  POSE_CONNECTIONS
-} from '@mediapipe/holistic';
-import {
-  drawConnectors,
-  drawLandmarks
-} from '@mediapipe/drawing_utils';
+  PoseLandmarker,
+  HandLandmarker,
+  FaceLandmarker,
+  FilesetResolver,
+  DrawingUtils
+} from '@mediapipe/tasks-vision';
 import { usePoseStore } from '../store/usePoseStore';
 
-const mediapipeTool = {
-  Holistic: Holistic || window.Holistic,
-  HAND_CONNECTIONS: HAND_CONNECTIONS || window.HAND_CONNECTIONS,
-  FACEMESH_TESSELATION: FACEMESH_TESSELATION || window.FACEMESH_TESSELATION,
-  FACEMESH_CONTOURS: FACEMESH_CONTOURS || window.FACEMESH_CONTOURS,
-  POSE_CONNECTIONS: POSE_CONNECTIONS || window.POSE_CONNECTIONS,
-  drawConnectors: drawConnectors || window.drawConnectors,
-  drawLandmarks: drawLandmarks || window.drawLandmarks,
-};
+const MODEL_PATH_POSE = '/model/pose_landmarker_heavy.task';
+const MODEL_PATH_HAND = '/model/hand_landmarker.task';
+const MODEL_PATH_FACE = '/model/face_landmarker.task';
 
 export const useHolistic = () => {
   const {
-    detectionConfidence,
-    trackingConfidence,
-    showVRM,
-    setPoseData,
-    setIsLoading,
     canvasRef,
     lastResultsRef,
   } = usePoseStore();
 
-  // 使用本地 ref 来存储 holistic 实例
-  const holisticInstanceRef = useRef(null);
+  const poseLandmarkerRef = useRef(null);
+  const handLandmarkerRef = useRef(null);
+  const faceLandmarkerRef = useRef(null);
+  const drawingUtilsRef = useRef(null);
+  const isInitializedRef = useRef(false);
 
-  // 绘制函数 - 不依赖 showSkeleton，直接从 store 读取
-  const drawCanvas = useCallback(() => {
+  const extractPoseLandmarks = useCallback((result) => {
+    const landmarks = result.landmarks?.[0] || null;
+    const worldLandmarks = result.worldLandmarks?.[0] || null;
+
+    const poseVisibility = new Float32Array(33);
+    if (landmarks) {
+      for (let i = 0; i < 33 && i < landmarks.length; i++) {
+        poseVisibility[i] = landmarks[i].visibility || 1.0;
+      }
+    }
+
+    return { landmarks, worldLandmarks, poseVisibility };
+  }, []);
+
+  const extractHandData = useCallback((result) => {
+    const hands = {
+      left: { landmarks: null, worldLandmarks: null },
+      right: { landmarks: null, worldLandmarks: null }
+    };
+
+    if (result.landmarks && result.landmarks.length > 0) {
+      for (let idx = 0; idx < result.landmarks.length; idx++) {
+        const landmarks = result.landmarks[idx];
+        const handedness = result.handednesses?.[idx]?.[0]?.categoryName;
+        const worldLandmarks = result.worldLandmarks?.[idx] || null;
+
+        if (handedness === 'Left') {
+          hands.left.landmarks = landmarks;
+          hands.left.worldLandmarks = worldLandmarks;
+        } else if (handedness === 'Right') {
+          hands.right.landmarks = landmarks;
+          hands.right.worldLandmarks = worldLandmarks;
+        }
+      }
+    }
+
+    return hands;
+  }, []);
+
+  const extractFaceData = useCallback((result) => {
+    const faceLandmarks = result.faceLandmarks?.[0] || null;
+    const faceBlendshapes = result.faceBlendshapes?.[0] || null;
+    const faceTransformationMatrix = result.facialTransformationMatrixes?.[0] || null;
+
+    return { faceLandmarks, faceBlendshapes, faceTransformationMatrix };
+  }, []);
+
+  const drawCanvas = useCallback((results) => {
     const canvasElement = canvasRef?.current;
-    if (!canvasElement) return;
+    if (!canvasElement || !drawingUtilsRef.current) return;
 
     const canvasCtx = canvasElement.getContext('2d');
-    const results = lastResultsRef?.current;
+    if (!canvasCtx) return;
 
-    if (!results) return;
-
-    const imageWidth = results.image?.width || 640;
-    const imageHeight = results.image?.height || 480;
+    const imageWidth = results.imageWidth || 640;
+    const imageHeight = results.imageHeight || 480;
 
     canvasElement.width = imageWidth;
     canvasElement.height = imageHeight;
@@ -72,128 +104,262 @@ export const useHolistic = () => {
       canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
     }
 
-    // 直接从 store 读取 showSkeleton，不依赖它
-    const { showSkeleton } = usePoseStore.getState();
+    const { showSkeleton, skeletonLineWidth, skeletonPointRadius } = usePoseStore.getState();
     if (showSkeleton) {
+      const drawingUtils = drawingUtilsRef.current;
+
+      const lineWidth = skeletonLineWidth;
+      const pointRadius = skeletonPointRadius;
+
       if (results.poseLandmarks) {
-        mediapipeTool.drawConnectors(canvasCtx, results.poseLandmarks, mediapipeTool.POSE_CONNECTIONS, {
-          color: '#00FF00',
-          lineWidth: 3
-        });
-        mediapipeTool.drawLandmarks(canvasCtx, results.poseLandmarks, {
+        drawingUtils.drawLandmarks(results.poseLandmarks, {
           color: '#FF0000',
-          lineWidth: 1,
-          radius: 4
+          lineWidth: lineWidth * 0.5,
+          radius: pointRadius
+        });
+        drawingUtils.drawConnectors(results.poseLandmarks, PoseLandmarker.POSE_CONNECTIONS, {
+          color: '#00FF00',
+          lineWidth: lineWidth
         });
       }
 
       if (results.faceLandmarks) {
-        mediapipeTool.drawConnectors(canvasCtx, results.faceLandmarks, mediapipeTool.FACEMESH_TESSELATION, {
-          color: '#C0C0C070',
-          lineWidth: 0.5
-        });
-        mediapipeTool.drawConnectors(canvasCtx, results.faceLandmarks, mediapipeTool.FACEMESH_CONTOURS, {
-          color: '#00FFFF',
-          lineWidth: 1.5
-        });
-        mediapipeTool.drawLandmarks(canvasCtx, results.faceLandmarks, {
+        drawingUtils.drawLandmarks(results.faceLandmarks, {
           color: '#FFFF00',
-          lineWidth: 0.5,
-          radius: 1.5
+          lineWidth: lineWidth * 0.3,
+          radius: pointRadius * 0.5
+        });
+        drawingUtils.drawConnectors(results.faceLandmarks, FaceLandmarker.FACE_LANDMARKS_TESSELATION, {
+          color: '#C0C0C070',
+          lineWidth: lineWidth * 0.3
+        });
+        drawingUtils.drawConnectors(results.faceLandmarks, FaceLandmarker.FACE_LANDMARKS_CONTOURS, {
+          color: '#00FFFF',
+          lineWidth: lineWidth * 0.7
         });
       }
 
       if (results.leftHandLandmarks) {
-        mediapipeTool.drawConnectors(canvasCtx, results.leftHandLandmarks, mediapipeTool.HAND_CONNECTIONS, {
-          color: '#0000FF',
-          lineWidth: 2
-        });
-        mediapipeTool.drawLandmarks(canvasCtx, results.leftHandLandmarks, {
+        drawingUtils.drawLandmarks(results.leftHandLandmarks, {
           color: '#FF00FF',
-          lineWidth: 0.8,
-          radius: 2.5
+          lineWidth: lineWidth * 0.4,
+          radius: pointRadius * 0.8
+        });
+        drawingUtils.drawConnectors(results.leftHandLandmarks, HandLandmarker.HAND_CONNECTIONS, {
+          color: '#0000FF',
+          lineWidth: lineWidth * 0.8
         });
       }
 
       if (results.rightHandLandmarks) {
-        mediapipeTool.drawConnectors(canvasCtx, results.rightHandLandmarks, mediapipeTool.HAND_CONNECTIONS, {
-          color: '#FF0000',
-          lineWidth: 2
-        });
-        mediapipeTool.drawLandmarks(canvasCtx, results.rightHandLandmarks, {
+        drawingUtils.drawLandmarks(results.rightHandLandmarks, {
           color: '#00FFFF',
-          lineWidth: 0.8,
-          radius: 2.5
+          lineWidth: lineWidth * 0.4,
+          radius: pointRadius * 0.8
+        });
+        drawingUtils.drawConnectors(results.rightHandLandmarks, HandLandmarker.HAND_CONNECTIONS, {
+          color: '#FF0000',
+          lineWidth: lineWidth * 0.8
         });
       }
     }
 
     canvasCtx.restore();
-  }, [canvasRef, lastResultsRef]);
+  }, [canvasRef]);
 
-  // 结果处理回调
-  const onResults = useCallback((results) => {
-    // 直接修改 ref，不触发状态更新
+  const processResults = useCallback((poseResult, handResult, faceResult, image, imageWidth, imageHeight) => {
+    const results = {
+      image,
+      imageWidth,
+      imageHeight,
+      poseLandmarks: null,
+      poseWorldLandmarks: null,
+      faceLandmarks: null,
+      leftHandLandmarks: null,
+      leftHandWorldLandmarks: null,
+      rightHandLandmarks: null,
+      rightHandWorldLandmarks: null,
+    };
+
+    if (poseResult) {
+      const { landmarks, worldLandmarks, poseVisibility } = extractPoseLandmarks(poseResult);
+      results.poseLandmarks = landmarks;
+      results.poseWorldLandmarks = worldLandmarks;
+      results.poseVisibility = poseVisibility;
+    }
+
+    if (handResult) {
+      const hands = extractHandData(handResult);
+      results.leftHandLandmarks = hands.left.landmarks;
+      results.leftHandWorldLandmarks = hands.left.worldLandmarks;
+      results.rightHandLandmarks = hands.right.landmarks;
+      results.rightHandWorldLandmarks = hands.right.worldLandmarks;
+    }
+
+    if (faceResult) {
+      const { faceLandmarks, faceBlendshapes, faceTransformationMatrix } = extractFaceData(faceResult);
+      results.faceLandmarks = faceLandmarks;
+      results.faceBlendshapes = faceBlendshapes;
+      results.faceTransformationMatrix = faceTransformationMatrix;
+    }
+
     if (lastResultsRef) {
       lastResultsRef.current = results;
     }
 
-    drawCanvas();
+    drawCanvas(results);
 
+    // 在内部获取状态，避免依赖变化导致重新初始化
+    const { showVRM, setPoseData: setPoseDataFromStore } = usePoseStore.getState();
     if (showVRM && (results.poseLandmarks || results.faceLandmarks)) {
-      setPoseData(results);
+      setPoseDataFromStore(results);
     }
-  }, [showVRM, drawCanvas, setPoseData, lastResultsRef]);
+  }, [extractPoseLandmarks, extractHandData, extractFaceData, drawCanvas, lastResultsRef]);
 
-  // 初始化 Holistic
+  const detectForVideo = useCallback(async (imageSource) => {
+    if (!poseLandmarkerRef.current || !handLandmarkerRef.current || !faceLandmarkerRef.current) {
+      return;
+    }
+
+    if (!imageSource || 
+        (imageSource.videoWidth === 0 && imageSource.width === 0) ||
+        (imageSource.videoHeight === 0 && imageSource.height === 0) ||
+        (imageSource.readyState !== undefined && imageSource.readyState < 2)) {
+      return;
+    }
+
+    try {
+      const timestamp = performance.now();
+      const poseResult = poseLandmarkerRef.current.detectForVideo(imageSource, timestamp);
+      const handResult = handLandmarkerRef.current.detectForVideo(imageSource, timestamp);
+      const faceResult = faceLandmarkerRef.current.detectForVideo(imageSource, timestamp);
+
+      processResults(
+        poseResult,
+        handResult,
+        faceResult,
+        imageSource,
+        imageSource.videoWidth || imageSource.width || 640,
+        imageSource.videoHeight || imageSource.height || 480
+      );
+    } catch (error) {
+      // 忽略 WASM 中止错误，这通常是由于 GPU 上下文被销毁引起的
+      if (error.message && error.message.includes('Aborted')) {
+        console.warn('MediaPipe WASM aborted, possibly due to GPU context loss. Stopping detection.');
+        // 停止处理以避免持续报错
+        const { setIsProcessing } = usePoseStore.getState();
+        setIsProcessing(false);
+      } else {
+        console.error('Error during detection:', error);
+      }
+    }
+  }, [processResults]);
+
   useEffect(() => {
-    const initializeHolistic = async () => {
+    // 防止重复初始化
+    if (isInitializedRef.current) return;
+    isInitializedRef.current = true;
+
+    const initializeLandmarkers = async () => {
       try {
-        const holistic = new mediapipeTool.Holistic({
-          locateFile: (file) => {
-            return `/holistic/${file}`;
-          }
+        // 在初始化时获取最新的配置值
+        const { detectionConfidence, trackingConfidence } = usePoseStore.getState();
+
+        const filesetResolver = await FilesetResolver.forVisionTasks(
+          '/@mediapipe/tasks-vision@0.10.32/wasm'
+        );
+
+        const poseLandmarker = await PoseLandmarker.createFromOptions(filesetResolver, {
+          baseOptions: {
+            modelAssetPath: MODEL_PATH_POSE,
+            delegate: 'GPU'
+          },
+          runningMode: 'VIDEO',
+          numPoses: 1,
+          minPoseDetectionConfidence: detectionConfidence,
+          minPosePresenceConfidence: detectionConfidence,
+          minTrackingConfidence: trackingConfidence,
+          outputSegmentationMasks: true
         });
 
-        holistic.setOptions({
-          modelComplexity: 1,
-          smoothLandmarks: true,
-          enableSegmentation: false,
-          smoothSegmentation: true,
-          detectionConfidence: detectionConfidence,
-          trackingConfidence: trackingConfidence
+        const handLandmarker = await HandLandmarker.createFromOptions(filesetResolver, {
+          baseOptions: {
+            modelAssetPath: MODEL_PATH_HAND,
+            delegate: 'GPU'
+          },
+          runningMode: 'VIDEO',
+          numHands: 2,
+          minHandDetectionConfidence: detectionConfidence,
+          minHandPresenceConfidence: detectionConfidence,
+          minTrackingConfidence: trackingConfidence
         });
 
-        holistic.onResults(onResults);
+        const faceLandmarker = await FaceLandmarker.createFromOptions(filesetResolver, {
+          baseOptions: {
+            modelAssetPath: MODEL_PATH_FACE,
+            delegate: 'GPU'
+          },
+          runningMode: 'VIDEO',
+          numFaces: 1,
+          minFaceDetectionConfidence: detectionConfidence,
+          minFacePresenceConfidence: detectionConfidence,
+          minTrackingConfidence: trackingConfidence,
+          outputFaceBlendshapes: true,
+          outputFacialTransformationMatrixes: true
+        });
 
-        holisticInstanceRef.current = holistic;
-        
-        // 更新 store 中的 ref
-        const { holisticRef } = usePoseStore.getState();
-        if (holisticRef) {
-          holisticRef.current = holistic;
+        poseLandmarkerRef.current = poseLandmarker;
+        handLandmarkerRef.current = handLandmarker;
+        faceLandmarkerRef.current = faceLandmarker;
+
+        const canvasElement = canvasRef?.current;
+        if (canvasElement) {
+          const canvasCtx = canvasElement.getContext('2d');
+          drawingUtilsRef.current = new DrawingUtils(canvasCtx);
         }
-        
-        setIsLoading(false);
+
+        const { holisticRef, setIsLoading: setIsLoadingFromStore } = usePoseStore.getState();
+        if (holisticRef) {
+          holisticRef.current = {
+            poseLandmarker,
+            handLandmarker,
+            faceLandmarker,
+            detectForVideo
+          };
+        }
+
+        setIsLoadingFromStore(false);
+        console.log('Landmarkers initialized successfully');
       } catch (error) {
-        console.error('Error initializing Holistic:', error);
+        console.error('Error initializing Landmarkers:', error);
         alert('Failed to initialize pose estimation model. Please refresh the page.');
       }
     };
 
-    initializeHolistic();
+    initializeLandmarkers();
 
     return () => {
-      if (holisticInstanceRef.current) {
-        holisticInstanceRef.current.close();
+      if (poseLandmarkerRef.current) {
+        poseLandmarkerRef.current.close();
+        poseLandmarkerRef.current = null;
       }
+      if (handLandmarkerRef.current) {
+        handLandmarkerRef.current.close();
+        handLandmarkerRef.current = null;
+      }
+      if (faceLandmarkerRef.current) {
+        faceLandmarkerRef.current.close();
+        faceLandmarkerRef.current = null;
+      }
+      isInitializedRef.current = false;
     };
-  }, [detectionConfidence, trackingConfidence, onResults, setIsLoading]);
+  }, []);
 
   return {
-    drawCanvas,
-    onResults,
-    mediapipeTool,
-    holisticInstanceRef,
+    detectForVideo,
+    poseLandmarkerRef,
+    handLandmarkerRef,
+    faceLandmarkerRef,
+    drawingUtilsRef,
   };
 };

@@ -279,7 +279,6 @@ export const useHolistic = () => {
 
     const initializeLandmarkers = async () => {
       try {
-        // 在初始化时获取最新的配置值
         const { detectionConfidence, trackingConfidence } = usePoseStore.getState();
 
         const filesetResolver = await FilesetResolver.forVisionTasks(

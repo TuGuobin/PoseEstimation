@@ -261,11 +261,9 @@ export const VRMViewer = ({ avatarUrl, poseData, videoElement }) => {
     }
   }, [currentVrm, videoElement]);
 
-  // 重置 VRM 到初始状态
   const resetToDefaultPose = useCallback(() => {
     if (!userData.vrm) return;
 
-    // 重置表情
     if (userData.vrm.expressionManager) {
       const expressions = userData.vrm.expressionManager.expressions;
       for (const name in expressions) {
@@ -273,7 +271,6 @@ export const VRMViewer = ({ avatarUrl, poseData, videoElement }) => {
       }
     }
 
-    // 重置骨骼旋转
     const bones = [
       'hips', 'spine', 'chest',
       'neck', 'head',
@@ -300,12 +297,10 @@ export const VRMViewer = ({ avatarUrl, poseData, videoElement }) => {
       }
     });
 
-    // 重置 lookAt 目标
     if (lookAtTarget.current) {
       lookAtTarget.current.position.set(0, 0, 0);
     }
 
-    // 清空引用
     faceExpressions.current = null;
     headRotation.current = null;
     pupilPosition.current = { x: 0, y: 0 };
@@ -318,7 +313,6 @@ export const VRMViewer = ({ avatarUrl, poseData, videoElement }) => {
     if (poseData) {
       processPoseData(poseData);
     } else {
-      // 当 poseData 为 null 时，重置到初始状态
       resetToDefaultPose();
     }
   }, [poseData, processPoseData, resetToDefaultPose]);
@@ -465,44 +459,71 @@ export const VRMViewer = ({ avatarUrl, poseData, videoElement }) => {
       const handSmooth = clamp(delta * 10, 0, 1);
 
       rotateBone("hips", riggedPose.current.Hips.rotation, bodySmooth, {
-        x: 0.7, y: 0.7, z: 0.7,
+        x: 0.3, y: 0.3, z: 0.2,
       });
 
       rotateBone("chest", riggedPose.current.Spine, bodySmooth, {
-        x: 0.25, y: 0.25, z: 0.25,
+        x: 0.15, y: 0.15, z: 0.1,
       });
       rotateBone("spine", riggedPose.current.Spine, bodySmooth, {
-        x: 0.45, y: 0.45, z: 0.45,
+        x: 0.2, y: 0.2, z: 0.1,
       });
 
-      // ── 手臂旋转 ───────────────────────────────────────────
       const lUA = riggedPose.current.LeftUpperArm;
       rotateBone("leftUpperArm", {
         x: clampRot(lUA.x, -Math.PI / 2, Math.PI / 2),
         y: clampRot(lUA.y, -Math.PI / 2, Math.PI / 2),
-        z: clampRot(lUA.z, -Math.PI, Math.PI / 4),
+        z: clampRot(lUA.z, -Math.PI / 2, Math.PI / 2),
       }, armSmooth);
 
       const lLA = riggedPose.current.LeftLowerArm;
       rotateBone("leftLowerArm", {
-        x: clampRot(lLA.x, -0.3, (5 / 6) * Math.PI),
-        y: clampRot(lLA.y, -Math.PI / 2, 0),
-        z: clampRot(lLA.z, -Math.PI / 3, Math.PI / 3),
+        x: clampRot(lLA.x, -Math.PI / 2, Math.PI / 2),
+        y: clampRot(lLA.y, -Math.PI / 2, Math.PI / 2),
+        z: clampRot(lLA.z, -Math.PI / 2, Math.PI / 2),
       }, armSmooth);
 
       const rUA = riggedPose.current.RightUpperArm;
       rotateBone("rightUpperArm", {
         x: clampRot(rUA.x, -Math.PI / 2, Math.PI / 2),
         y: clampRot(rUA.y, -Math.PI / 2, Math.PI / 2),
-        z: clampRot(rUA.z, -Math.PI / 4, Math.PI),
+        z: clampRot(rUA.z, -Math.PI / 2, Math.PI / 2),
       }, armSmooth);
 
       const rLA = riggedPose.current.RightLowerArm;
       rotateBone("rightLowerArm", {
-        x: clampRot(rLA.x, -0.3, (5 / 6) * Math.PI),
-        y: clampRot(rLA.y, 0, Math.PI / 2),
-        z: clampRot(rLA.z, -Math.PI / 3, Math.PI / 3),
+        x: clampRot(rLA.x, -Math.PI / 2, Math.PI / 2),
+        y: clampRot(rLA.y, -Math.PI / 2, Math.PI / 2),
+        z: clampRot(rLA.z, -Math.PI / 2, Math.PI / 2),
       }, armSmooth);
+
+      const lUL = riggedPose.current.LeftUpperLeg;
+      rotateBone("leftUpperLeg", {
+        x: clampRot(lUL.x, -Math.PI / 2, Math.PI / 2),
+        y: clampRot(lUL.y, -Math.PI / 2, Math.PI / 2),
+        z: clampRot(lUL.z, -Math.PI / 2, Math.PI / 2),
+      }, bodySmooth);
+
+      const lLL = riggedPose.current.LeftLowerLeg;
+      rotateBone("leftLowerLeg", {
+        x: clampRot(lLL.x, -Math.PI, 0),
+        y: clampRot(lLL.y, -Math.PI / 2, Math.PI / 2),
+        z: clampRot(lLL.z, -Math.PI / 2, Math.PI / 2),
+      }, bodySmooth);
+
+      const rUL = riggedPose.current.RightUpperLeg;
+      rotateBone("rightUpperLeg", {
+        x: clampRot(rUL.x, -Math.PI / 2, Math.PI / 2),
+        y: clampRot(rUL.y, -Math.PI / 2, Math.PI / 2),
+        z: clampRot(rUL.z, -Math.PI / 2, Math.PI / 2),
+      }, bodySmooth);
+
+      const rLL = riggedPose.current.RightLowerLeg;
+      rotateBone("rightLowerLeg", {
+        x: clampRot(rLL.x, -Math.PI, 0),
+        y: clampRot(rLL.y, -Math.PI / 2, Math.PI / 2),
+        z: clampRot(rLL.z, -Math.PI / 2, Math.PI / 2),
+      }, bodySmooth);
 
       if (riggedLeftHand.current) {
         rotateBone("leftHand", {
